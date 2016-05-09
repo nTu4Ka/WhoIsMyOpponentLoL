@@ -220,6 +220,8 @@ public class MainController : MonoBehaviour {
     //set summoner on OK click in UI
     public void SetNewSummoner(int RegionNr, string NewSummonerName) {
 
+        ClearGameData(false);
+
         NotificationPanel.SetActive(false);
 
         StopAllCoroutines();
@@ -247,6 +249,37 @@ public class MainController : MonoBehaviour {
         MainObjRef.CrestIcon.GetComponent<Image>().sprite = ((Sprite)Resources.Load("empty-pixel", typeof(Sprite)));
         MainObjRef.ChestState.GetComponent<Image>().sprite = ((Sprite)Resources.Load("empty-pixel", typeof(Sprite)));
 
+        if (SummonerName.Length > 0) {
+            SearchNewSummoner();
+        } else {
+            StartCoroutine(ShowNotification("Please enter summoner name."));
+        }
+    }
+
+    //set new summoner by clicking on player
+    public void SelectPlayerSummoner(string Name) {
+
+        NotificationPanel.SetActive(false);
+
+        StopAllCoroutines();
+        SearchingGameSpinner.SetActive(false);
+
+        SummonerNameUI = Name;
+        SummonerName = SummonerNameUI.ToLower().Replace(" ", "");        
+        SummonerNameSelect.GetComponent<SummonerSelect>().NameInput.GetComponent<InputField>().text = SummonerNameUI;
+        PlayerPrefs.SetString("SummonerName", SummonerNameUI);
+
+        //empty previous data
+        foreach (GameObject ChampionObject in SecondaryChampions) {
+            Destroy(ChampionObject);
+        }
+        SecondaryChampions = new List<GameObject>();
+
+        MainChampReferences MainObjRef = MainChampion.GetComponent<MainChampReferences>();
+        MainObjRef.Portrait.GetComponent<Image>().sprite = ((Sprite)Resources.Load("Faces/Round90/_default_90", typeof(Sprite)));
+        MainObjRef.XP.GetComponent<Text>().text = "";
+        MainObjRef.CrestIcon.GetComponent<Image>().sprite = ((Sprite)Resources.Load("empty-pixel", typeof(Sprite)));
+        MainObjRef.ChestState.GetComponent<Image>().sprite = ((Sprite)Resources.Load("empty-pixel", typeof(Sprite)));
 
         SearchNewSummoner();
     }
@@ -656,6 +689,14 @@ public class MainController : MonoBehaviour {
     //periodically lookup summoner's current game
     public void TryShowCurrentGame(WWW UrlHandler) {
 
+        foreach (GameObject Player in PlayerOpponents) {
+            Destroy(Player);
+        }
+        foreach (GameObject Player in PlayerAllies) {
+            Destroy(Player);
+        }
+        CurrentGameChampionIds = new List<string>();
+
         SearchingGameSpinner.SetActive(false);
         AudioSource.PlayClipAtPoint(GameFoundSound, Vector3.zero);
 
@@ -704,6 +745,9 @@ public class MainController : MonoBehaviour {
             PlayerObj.transform.parent = RAlliesParent.transform;
         }
         PlayerObj.transform.localPosition = Mapping.GetPlayerChampPosition(IsOpponent, PlayerPosition);
+
+        PlayerObj.GetComponent<Button>().onClick.RemoveAllListeners();
+        PlayerObj.GetComponent<Button>().onClick.AddListener(() => SelectPlayerSummoner(SummonerName));
 
         PlayerReferences DetailsRef = PlayerObj.GetComponent<PlayerReferences>();
         
