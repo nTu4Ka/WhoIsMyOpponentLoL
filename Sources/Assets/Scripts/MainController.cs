@@ -36,6 +36,11 @@ public class MainController : MonoBehaviour {
     public GameObject SearchingPreloader;
     public GameObject NotificationPanel;
     public GameObject NotificationText;
+    //gameobjects - champions without mastery chests
+    public GameObject NoChestChampionsWindow;
+    public GameObject NoChestChampionsContent;
+    public GameObject BigChestButton;
+    public GameObject NoChestChampionPrefab;
     //gameobjects - champion tracking
     public GameObject TrackChampionWindow;
     public GameObject TrackChampionsListParent;
@@ -79,7 +84,8 @@ public class MainController : MonoBehaviour {
     //player settings
     private Glossary.Region RegionCode;
     private string SummonerName;
-    private string SummonerNameUI;    
+    private string SummonerNameUI;
+    bool ChestButtonInteracted = false;
 
     //private
     private string SummonerID = "";
@@ -92,17 +98,29 @@ public class MainController : MonoBehaviour {
     private List<GameObject> PlayerOpponents;
     private List<GameObject> PlayerAllies;
     private List<GameObject> AllTrackingSelectButtons;
-    private List<string> CurrentGameChampionIds;
+    private List<GameObject> ChampionsWithoutChest;
+    private List<string> CurrentGameChampionIds;    
 
 
     void Awake () {
-
+        
         Instance = this;
         
         SummonerNameUI = CheckPlayerPrefs("SummonerName");
         SummonerName = SummonerNameUI.ToLower().Replace(" ", "");
         RegionCode = CheckPlayerPrefs();
-        RegionString = RegionCode.ToString().ToLower();        
+        RegionString = RegionCode.ToString().ToLower();
+
+        string ChestButtonInteractedSetting = CheckPlayerPrefs("ChestButtonInteracted");
+        if (ChestButtonInteractedSetting.Length == 0) {
+            ChestButtonInteracted = false;
+        } else {
+            ChestButtonInteracted = bool.Parse(ChestButtonInteractedSetting);
+        }
+        
+        if (ChestButtonInteracted) {
+            BigChestButton.GetComponent<Animator>().enabled = false;
+        }
 
         APIPrefix = "https://" + RegionString + ".api.pvp.net";
 
@@ -128,6 +146,7 @@ public class MainController : MonoBehaviour {
         PlayerOpponents = new List<GameObject>();
         PlayerAllies = new List<GameObject>();
         CurrentGameChampionIds = new List<string>();
+        ChampionsWithoutChest = new List<GameObject>();
 
         //load crest, chest sprites
         LoadResources();
@@ -193,13 +212,10 @@ public class MainController : MonoBehaviour {
 
 
     //check player prefs, string parameter - summoner name
-    private string CheckPlayerPrefs(string Type) {
+    private string CheckPlayerPrefs(string Type) {        
 
-        if (Type == "SummonerName") {
-            if (PlayerPrefs.HasKey("SummonerName")) {
-
-                return PlayerPrefs.GetString("SummonerName");
-            }
+        if (PlayerPrefs.HasKey(Type)) {
+            return PlayerPrefs.GetString(Type);
         }
 
         return "";
@@ -220,7 +236,7 @@ public class MainController : MonoBehaviour {
     //set summoner on OK click in UI
     public void SetNewSummoner(int RegionNr, string NewSummonerName) {
 
-        ClearGameData(false);
+        ClearGameData(false);        
 
         NotificationPanel.SetActive(false);
 
@@ -347,6 +363,28 @@ public class MainController : MonoBehaviour {
     }
 
 
+    //toggle champions without mastery chests modal
+    public void ToggleNoChestChampionsWindow() {
+        if (NoChestChampionsWindow.activeInHierarchy == true) {
+            AudioSource.PlayClipAtPoint(ClickCloseSound, Vector3.zero);
+            NoChestChampionsWindow.SetActive(false);
+        } else {
+            AudioSource.PlayClipAtPoint(ClickOpenSound, Vector3.zero);
+            NoChestChampionsWindow.SetActive(true);
+            if (!ChestButtonInteracted) {
+                ChestButtonInteracted = true;
+                PlayerPrefs.SetString("ChestButtonInteracted", "true");
+                BigChestButton.GetComponent<Animator>().enabled = false;
+            }
+        }
+    }
+    //close champions without mastery chests modal
+    public void CloseNoChestsChampionsWindow() {
+        AudioSource.PlayClipAtPoint(ClickCloseSound, Vector3.zero);
+        NoChestChampionsWindow.SetActive(false);
+    }
+
+
 
 
     //--------------Internal logic----------------//
@@ -436,6 +474,8 @@ public class MainController : MonoBehaviour {
     //start summoner search on start or on OK click - show preloader
     private void SearchNewSummoner() {
 
+        ClearChampionsWithoutChests();
+
         NotificationPanel.SetActive(false);
         SearchingPreloader.SetActive(true);
         
@@ -515,7 +555,7 @@ public class MainController : MonoBehaviour {
                 ClearGameData(false);
             } else {
                 ClearGameData(true);
-                StartCoroutine(ShowNotification("Server error.\nTry again later."));
+                //StartCoroutine(ShowNotification("Server error.\nTry again later."));
             }
         }
 
@@ -599,13 +639,14 @@ public class MainController : MonoBehaviour {
 
             //set summoner ID
             JSONNode JSONData = JSON.Parse(UrlHandler.text);
-            SummonerID = JSONData[SummonerName]["id"].Value;            
-
+            SummonerID = JSONData[SummonerName]["id"].Value;
+            
             //show summoner's champions and look if he's in a game
             string PlatformID = Mapping.GetPlatformIDByRegionCode(RegionCode);
 
             string GetChampionsUrl = APIPrefix + "/championmastery/location/" + PlatformID + "/player/" + SummonerID + "/champions?api_key=" + API_Key;
             StartCoroutine(GetUrlData(GetChampionsUrl, DisplayChampions));
+            StartCoroutine(GetUrlData(GetChampionsUrl, PopulateNoChestChampions));
 
             string GetGameUrl = APIPrefix + "/observer-mode/rest/consumer/getSpectatorGameInfo/" + PlatformID + "/" + SummonerID + "?api_key=" + API_Key;            
             StartCoroutine(GetPlayersGameData(GetGameUrl, TryShowCurrentGame));
@@ -613,7 +654,7 @@ public class MainController : MonoBehaviour {
         } else if (HttpStatus.Contains("404")) {
             StartCoroutine(ShowNotification("Summoner not found."));
         } else {
-            StartCoroutine(ShowNotification("Server error.\nTry again later."));
+            StartCoroutine(ShowNotification("Server error occured while retrieving summoner data.\nTry again later."));
         }
     }
 
@@ -680,8 +721,76 @@ public class MainController : MonoBehaviour {
         } else if (HttpStatus.Contains("404")) {
             StartCoroutine(ShowNotification("No champion mastery found."));
         } else {
-            StartCoroutine(ShowNotification("Server error.\nTry again later."));
+            StartCoroutine(ShowNotification("Server error occured while retrieving champions data.\nTry again later."));
         }
+    }
+
+
+    //instantiate player champions
+    public void PopulateNoChestChampions(WWW UrlHandler) {
+
+        string HttpStatus = UrlHandler.responseHeaders["STATUS"];
+
+        if (HttpStatus.Contains("200")) {
+
+            if (UrlHandler.text.Length > 100) {
+                
+                JSONNode JSONData = JSON.Parse(UrlHandler.text);
+                JSONArray Champions = JSONData.AsArray;
+
+                GameObject ChampionObj;
+                string ChampionName;
+                NoChestChampionsRef ChampionDataRef;
+
+                int ChampionNr = 0;
+                int IndexX = 1;
+                int IndexY = 1;
+                float PosX;
+                float PosY;
+
+                foreach (JSONNode Champion in Champions) {
+
+                    if (Champion["championId"] == null) continue;
+                    if (Champion["chestGranted"].AsBool) continue;
+
+                    ChampionObj = (GameObject)Instantiate(NoChestChampionPrefab, Vector3.zero, Quaternion.identity);
+                    ChampionObj.transform.parent = NoChestChampionsContent.transform;
+
+                    IndexX = ChampionNr % 8;
+                    IndexY = Mathf.CeilToInt(ChampionNr / 8);
+
+                    PosX = 55f + 90f * IndexX;
+                    PosY = -80f - 100f * IndexY;
+                    ChampionObj.transform.localPosition = new Vector3(PosX, PosY, 0f);
+
+                    ChampionDataRef = ChampionObj.GetComponent<NoChestChampionsRef>();
+
+                    ChampionName = Mapping.GetChampionPortraitNameById(Champion["championId"].Value);
+                    ChampionDataRef.Icon.GetComponent<Image>().sprite = ((Sprite)Resources.Load("Faces/Square70/" + ChampionName + "_s70", typeof(Sprite)));
+                    ChampionDataRef.Name.GetComponent<Text>().text = Mapping.GetChampionNameById(Champion["championId"].Value);
+
+                    ChampionsWithoutChest.Add(ChampionObj);
+
+                    ChampionNr++;
+                }
+                
+                NoChestChampionsContent.GetComponent<RectTransform>().sizeDelta = new Vector2(0f, 140f + IndexY * 100f);
+            } else {
+                //StartCoroutine(ShowNotification("No champion mastery found."));
+            }
+        } else if (HttpStatus.Contains("404")) {
+            //StartCoroutine(ShowNotification("No champion mastery found."));
+        } else {
+            //StartCoroutine(ShowNotification("Server error occured while retrieving data for champions witout chest.\nTry again later."));
+        }
+    }
+
+    //clear list of champions without chests on new summoner
+    private void ClearChampionsWithoutChests() {
+        foreach(GameObject NoChestChampion in ChampionsWithoutChest) {
+            Destroy(NoChestChampion);
+        }
+        ChampionsWithoutChest = new List<GameObject>();
     }
 
 
@@ -818,7 +927,7 @@ public class MainController : MonoBehaviour {
             StartCoroutine(ShowNotification("No data found."));
             return null;
         } else {
-            StartCoroutine(ShowNotification("Server error.\nTry again later."));
+            StartCoroutine(ShowNotification("Could not retrieve data for\nall players due to server error."));
             return null;
         }
     }

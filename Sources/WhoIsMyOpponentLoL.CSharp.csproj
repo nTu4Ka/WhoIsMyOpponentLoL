@@ -75,6 +75,7 @@
     <Compile Include="Assets\Scripts\Behavior\HelpController.cs" />
     <Compile Include="Assets\Scripts\Behavior\LoadingBG.cs" />
     <Compile Include="Assets\Scripts\Behavior\MainChampReferences.cs" />
+    <Compile Include="Assets\Scripts\Behavior\NoChestChampionsRef.cs" />
     <Compile Include="Assets\Scripts\Behavior\PlayerReferences.cs" />
     <Compile Include="Assets\Scripts\Behavior\SecondaryChampReferences.cs" />
     <Compile Include="Assets\Scripts\Behavior\SummonerSelect.cs" />
