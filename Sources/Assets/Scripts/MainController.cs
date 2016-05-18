@@ -13,6 +13,8 @@ public class MainController : MonoBehaviour {
     static public MainController Instance {get; private set; }
 
     private delegate void Callback(WWW UrlHandler);
+    private delegate IEnumerator IECallback(WWW UrlHandler);
+    
     private delegate void DrawPlayer(string SummonerName, string PlayedChampionId, WWW UrlHandlerMastery, WWW UrlHandlerCurrent, bool IsOpponent, int Position);
     
     Vector3 CurrentPosition;
@@ -95,8 +97,7 @@ public class MainController : MonoBehaviour {
     private Sprite ChestInactive;
     private Dictionary<Glossary.CrestIcon, Sprite> CrestIcons;
     private List<GameObject> SecondaryChampions;
-    private List<GameObject> PlayerOpponents;
-    private List<GameObject> PlayerAllies;
+    private List<Player> CurrentGamePlayers;
     private List<GameObject> AllTrackingSelectButtons;
     private List<GameObject> ChampionsWithoutChest;
     private List<string> CurrentGameChampionIds;    
@@ -142,11 +143,10 @@ public class MainController : MonoBehaviour {
             CurrentTrackedBtns[2].GetComponent<Image>().sprite = ((Sprite)Resources.Load("Faces/Square70/" + ChampionTextureName + "_s70", typeof(Sprite)));
         }
 
-        SecondaryChampions = new List<GameObject>();
-        PlayerOpponents = new List<GameObject>();
-        PlayerAllies = new List<GameObject>();
+        SecondaryChampions = new List<GameObject>();        
         CurrentGameChampionIds = new List<string>();
         ChampionsWithoutChest = new List<GameObject>();
+        CurrentGamePlayers = new List<Player>();
 
         //load crest, chest sprites
         LoadResources();
@@ -176,6 +176,10 @@ public class MainController : MonoBehaviour {
                 CurrentPosition.x = 480;                
                 RightPanelIsExpanding = false;                
                 CollapseRightPanelBtn.SetActive(true);
+
+                if (!GameInProgress) {
+                    SearchingGameSpinner.SetActive(true);
+                }
             }
 
             RightPanel.transform.localPosition = CurrentPosition;
@@ -192,6 +196,10 @@ public class MainController : MonoBehaviour {
                 RightPanelIsCollapsing = false;
                 ExpandRightPanelBtn.SetActive(true);
                 ExpandRightPanelBtn_Scroll.SetActive(true);
+
+                if (!GameInProgress) {
+                    SearchingGameSpinner.SetActive(true);
+                }
             }
 
             RightPanel.transform.localPosition = CurrentPosition;
@@ -306,6 +314,10 @@ public class MainController : MonoBehaviour {
         ExpandRightPanelBtn.SetActive(false);
         ExpandRightPanelBtn_Scroll.SetActive(false);
         RightPanelIsExpanding = true;
+
+        if (!GameInProgress) {
+            SearchingGameSpinner.SetActive(false);
+        }
     }
 
     //collapse right panel
@@ -313,6 +325,10 @@ public class MainController : MonoBehaviour {
         AudioSource.PlayClipAtPoint(CloseRightPanelSound, Vector3.zero);
         CollapseRightPanelBtn.SetActive(false);
         RightPanelIsCollapsing = true;
+
+        if (!GameInProgress) {
+            SearchingGameSpinner.SetActive(false);
+        }
     }
 
     //open select tracked champion window
@@ -527,14 +543,12 @@ public class MainController : MonoBehaviour {
 
             if (urlHandler.text.Length > 10) {
 
-                GameInProgress = true;
-
                 //check if it's a new game
                 string GameId = JSONData["gameId"];
 
                 if (CurrentGameId != GameId) {
                     CurrentGameChampionIds = new List<string>();
-                    CurrentGameId = GameId;                    
+                    CurrentGameId = GameId;
                     Function(urlHandler);
                 }
             } else {
@@ -577,29 +591,11 @@ public class MainController : MonoBehaviour {
         CurrentGameKey = "";
         CurrentGamePlatformId = "";
 
-        foreach (GameObject PlayerObj in PlayerOpponents) {
-            Destroy(PlayerObj);
+        foreach(Player PlayerData in CurrentGamePlayers) {
+            PlayerData.ClearUIObject();
         }
-        foreach (GameObject PlayerObj in PlayerAllies) {
-            Destroy(PlayerObj);
-        }
+        CurrentGamePlayers = new List<Player>();
     }
-    
-
-    //get WWW data speciefically for players
-    private IEnumerator GetPlayersData(string SummonerName, string ChampionId, string ChampionsUrl, string CurrentChampionUrl, DrawPlayer DrawUIFunction, bool IsOpponent, int Position) {
-
-        WWW urlHandlerMastery = new WWW(ChampionsUrl);
-        yield return urlHandlerMastery;
-
-        WWW urlHandlerCurrent = new WWW(CurrentChampionUrl);
-        yield return urlHandlerCurrent;        
-
-        DrawUIFunction(SummonerName, ChampionId, urlHandlerMastery, urlHandlerCurrent, IsOpponent, Position);
-
-        yield break;
-    }
-
 
 
     //--------------CALLBACKS FOR COROUTINE----------------//
@@ -649,7 +645,7 @@ public class MainController : MonoBehaviour {
             StartCoroutine(GetUrlData(GetChampionsUrl, PopulateNoChestChampions));
 
             string GetGameUrl = APIPrefix + "/observer-mode/rest/consumer/getSpectatorGameInfo/" + PlatformID + "/" + SummonerID + "?api_key=" + API_Key;            
-            StartCoroutine(GetPlayersGameData(GetGameUrl, TryShowCurrentGame));
+            StartCoroutine(GetPlayersGameData(GetGameUrl, PrepareCurrentGameData));
 
         } else if (HttpStatus.Contains("404")) {
             StartCoroutine(ShowNotification("Summoner not found."));
@@ -796,142 +792,107 @@ public class MainController : MonoBehaviour {
 
 
     //periodically lookup summoner's current game
-    public void TryShowCurrentGame(WWW UrlHandler) {
-
-        foreach (GameObject Player in PlayerOpponents) {
-            Destroy(Player);
+    public void PrepareCurrentGameData(WWW UrlHandler) {
+        
+        //clear last game data
+        foreach(Player PlayerRef in CurrentGamePlayers) {
+            PlayerRef.ClearUIObject();
         }
-        foreach (GameObject Player in PlayerAllies) {
-            Destroy(Player);
-        }
-        CurrentGameChampionIds = new List<string>();
+        CurrentGamePlayers = new List<Player>();
 
-        SearchingGameSpinner.SetActive(false);
-        AudioSource.PlayClipAtPoint(GameFoundSound, Vector3.zero);
-
+        //populate new data
         JSONNode JSONData = JSON.Parse(UrlHandler.text);
                 
         CurrentGameKey = JSONData["observers"]["encryptionKey"];
-        CurrentGamePlatformId = JSONData["platformId"];        
+        CurrentGamePlatformId = JSONData["platformId"];
         
+        Player PlayerData;        
         string GetMasterysUrl;
         string GetCurrentUrl;
         int AllyPosition = 1;
         int OpponentPosition = 1;
 
-        JSONArray Players = JSONData["participants"].AsArray;
+        JSONArray PlayersData = JSONData["participants"].AsArray;
 
-        foreach (JSONNode Player in Players) {
+        foreach (JSONNode PlayerJSON in PlayersData) {
 
-            GetMasterysUrl = APIPrefix + "/championmastery/location/" + CurrentGamePlatformId + "/player/" + Player["summonerId"] + "/champions?api_key=" + API_Key;
-            GetCurrentUrl = APIPrefix + "/championmastery/location/" + CurrentGamePlatformId + "/player/" + Player["summonerId"] + "/champion/" + Player["championId"].Value + "?api_key=" + API_Key;
-
-            if (Player["teamId"].Value == "100") {                        
-                StartCoroutine(GetPlayersData(Player["summonerName"].Value, Player["championId"].Value, GetMasterysUrl, GetCurrentUrl, DisplayPlayer, false, AllyPosition));
+            GetCurrentUrl = APIPrefix + "/championmastery/location/" + CurrentGamePlatformId + "/player/" + PlayerJSON["summonerId"] + "/champion/" + PlayerJSON["championId"].Value + "?api_key=" + API_Key;
+            GetMasterysUrl = APIPrefix + "/championmastery/location/" + CurrentGamePlatformId + "/player/" + PlayerJSON["summonerId"] + "/champions?api_key=" + API_Key;
+            
+            if (PlayerJSON["teamId"].Value == "100") {
+                PlayerData = new Player(PlayerJSON["summonerName"].Value,
+                                        PlayerJSON["championId"].Value,                                        
+                                        GetCurrentUrl,
+                                        GetMasterysUrl,
+                                        false,
+                                        AllyPosition);
                 AllyPosition++;
             } else {
-                StartCoroutine(GetPlayersData(Player["summonerName"].Value, Player["championId"].Value, GetMasterysUrl, GetCurrentUrl, DisplayPlayer, true, OpponentPosition));
+                PlayerData = new Player(PlayerJSON["summonerName"].Value,
+                                        PlayerJSON["championId"].Value,                                        
+                                        GetCurrentUrl,
+                                        GetMasterysUrl,
+                                        true,
+                                        OpponentPosition);                
                 OpponentPosition++;
-            }            
+            }
 
-            CurrentGameChampionIds.Add(Player["championId"].Value);            
+            CurrentGamePlayers.Add(PlayerData);
+            CurrentGameChampionIds.Add(PlayerJSON["championId"].Value);
         }
 
+        StartCoroutine(RetrievePlayersMasteryData());
         CheckRecordReplay();
     }
 
+    //cycle which going to retrieve API data and populate URL handlers
+    public IEnumerator RetrievePlayersMasteryData() {
 
-    //preprocess data to draw players in UI
-    public void DisplayPlayer(string SummonerName, string PlayedChampionId, WWW UrlHandlerMastery, WWW UrlHandlerCurrent, bool IsOpponent, int PlayerPosition) {
+        bool AllDataLoaded = true;
 
-        Player Data;
+        foreach (Player PlayerData in CurrentGamePlayers) {
 
-        GameObject PlayerObj = (GameObject)Instantiate(RPlayerPrefab, Vector3.zero, Quaternion.identity);
+            if (!PlayerData._DataRetrieved) {
 
-        if (IsOpponent) {
-            PlayerObj.transform.parent = ROpponentsParent.transform;
-        } else {
-            PlayerObj.transform.parent = RAlliesParent.transform;
-        }
-        PlayerObj.transform.localPosition = Mapping.GetPlayerChampPosition(IsOpponent, PlayerPosition);
+                WWW UrlHandler;
 
-        PlayerObj.GetComponent<Button>().onClick.RemoveAllListeners();
-        PlayerObj.GetComponent<Button>().onClick.AddListener(() => SelectPlayerSummoner(SummonerName));
+                UrlHandler = new WWW(PlayerData._GetPlayedChampUrl);
+                yield return UrlHandler;
+                PlayerData._UrlHandlerPlayed = UrlHandler;
 
-        PlayerReferences DetailsRef = PlayerObj.GetComponent<PlayerReferences>();
-        
-        DetailsRef.SummonerName.GetComponent<Text>().text = SummonerName;
+                yield return new WaitForSeconds(0.3f);
 
+                UrlHandler = new WWW(PlayerData._GetMasteryUrl);
+                yield return UrlHandler;
+                PlayerData._UrlHandlerMastery = UrlHandler;
 
-        //###need to use UrlHandlerCurrent to get mastery level for current champ in order to display "dots" - champion mastery level
+                PlayerData._DataRetrieved = true;
 
-        //current
-        string ChampionName = Mapping.GetChampionPortraitNameById(PlayedChampionId);
-        Sprite ChampionIcon = ((Sprite)Resources.Load("Faces/Square70/" + ChampionName + "_s70", typeof(Sprite)));
-        DetailsRef.PortraitCurrent.GetComponent<Image>().sprite = ChampionIcon;
-        
-        //main
-        Data = GetPlayerAssets(UrlHandlerMastery, 0, "Round70", "_70");
-        if (Data != null) {
-            DetailsRef.PortraitMain.GetComponent<Image>().sprite = Data._Icon;
-        }
-        //secondary 1
-        Data = GetPlayerAssets(UrlHandlerMastery, 1, "Square50", "_s50");
-        if (Data != null) {
-            DetailsRef.PortraitSecondary1.GetComponent<Image>().sprite = Data._Icon;
-        }
-        //secondary 2
-        Data = GetPlayerAssets(UrlHandlerMastery, 2, "Square50", "_s50");
-        if (Data != null) {
-            DetailsRef.PortraitSecondary2.GetComponent<Image>().sprite = Data._Icon;
-        }
-        
-        if (IsOpponent) {
-            PlayerOpponents.Add(PlayerObj);            
-        } else {
-            PlayerAllies.Add(PlayerObj);
-        }
-    }
+                PlayerData.CreateUIObject();
 
-    //draw players in UI
-    private Player GetPlayerAssets(WWW UrlHandler, int Index, string Directory, string Suffix) {
+                AllDataLoaded = false;
 
-        string HttpStatus = UrlHandler.responseHeaders["STATUS"];
-
-        if (HttpStatus.Contains("200")) {
-
-            if (UrlHandler.text.Length > 100) {
-
-                JSONNode JSONData = JSON.Parse(UrlHandler.text);
-
-                string ChampionId;
-                string ChampionLevel;
-
-                if (Index == -999) {
-                    ChampionId = JSONData["championId"].Value;
-                    ChampionLevel = JSONData["championLevel"].Value;
-                } else {
-                    ChampionId = JSONData[Index]["championId"].Value;
-                    ChampionLevel = JSONData[Index]["championLevel"].Value;
-                }
-
-                string ChampionName = Mapping.GetChampionPortraitNameById(ChampionId);
-                Sprite ChampionIcon = ((Sprite)Resources.Load("Faces/" + Directory + "/" + ChampionName + Suffix, typeof(Sprite)));
-
-                return new Player(ChampionIcon, ChampionLevel);
-            } else {
-                StartCoroutine(ShowNotification("No data found."));
-                return null;
+                break;
             }
-        } else if (HttpStatus.Contains("404")) {
-            StartCoroutine(ShowNotification("No data found."));
-            return null;
-        } else {
-            StartCoroutine(ShowNotification("Could not retrieve data for\nall players due to server error."));
-            return null;
         }
-    }
 
+        if (!AllDataLoaded) {
+
+            yield return new WaitForSeconds(1f);
+            StartCoroutine(RetrievePlayersMasteryData());            
+        } else {
+
+            GameInProgress = true;
+            SearchingGameSpinner.SetActive(false);
+            AudioSource.PlayClipAtPoint(GameFoundSound, Vector3.zero);
+
+            foreach (Player PlayerData in CurrentGamePlayers) {
+                PlayerData.Display();
+            }
+
+            yield break;
+        }        
+    }
 
     //checks if current game has tracked champions and creates replay file
     private void CheckRecordReplay() {        
