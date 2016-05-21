@@ -27,6 +27,8 @@ public class MainController : MonoBehaviour {
 
     //right panel collapsing
     private Vector3 DefaultRightPanelPosition;
+    private Vector2 DefaultSpinnerPivot;
+    private Vector3 DefaultSpinnerLocalPosition;
     private bool RightPanelIsCollapsing;
     private float CollapsingSpeed = 60f;
     public GameObject CollapseRightPanelBtn;
@@ -70,7 +72,7 @@ public class MainController : MonoBehaviour {
     public AudioClip SelectTrackedChampionSound;
     public AudioClip DeselectTrackedChampionSound;
 
-    //public settings
+    //api settings
     public string API_Key;
     private string APIPrefix;
     private string RegionString;
@@ -159,6 +161,8 @@ public class MainController : MonoBehaviour {
     void Start() {
 
         DefaultRightPanelPosition = RightPanel.transform.localPosition;
+        DefaultSpinnerPivot = SearchingGameSpinner.GetComponent<RectTransform>().pivot;
+        DefaultSpinnerLocalPosition = SearchingGameSpinner.GetComponent<RectTransform>().localPosition;
 
         TryEnableUI();
         CheckRecordReplay();
@@ -177,7 +181,10 @@ public class MainController : MonoBehaviour {
                 RightPanelIsExpanding = false;                
                 CollapseRightPanelBtn.SetActive(true);
 
-                if (!GameInProgress) {
+                SearchingGameSpinner.GetComponent<RectTransform>().pivot = new Vector2(0.5f, 1f);
+                SearchingGameSpinner.GetComponent<RectTransform>().localPosition = new Vector3(0f, 31f, 0f);
+
+                if (!GameInProgress) {                    
                     SearchingGameSpinner.SetActive(true);
                 }
             }
@@ -197,7 +204,10 @@ public class MainController : MonoBehaviour {
                 ExpandRightPanelBtn.SetActive(true);
                 ExpandRightPanelBtn_Scroll.SetActive(true);
 
-                if (!GameInProgress) {
+                SearchingGameSpinner.GetComponent<RectTransform>().pivot = DefaultSpinnerPivot;
+                SearchingGameSpinner.GetComponent<RectTransform>().localPosition = DefaultSpinnerLocalPosition;
+
+                if (!GameInProgress) {                    
                     SearchingGameSpinner.SetActive(true);
                 }
             }
@@ -527,6 +537,7 @@ public class MainController : MonoBehaviour {
         if (!GameInProgress) {
             SearchingGameSpinner.SetActive(true);
         } else {
+
             SearchingGameSpinner.SetActive(false);
         }
                 

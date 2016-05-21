@@ -78,6 +78,7 @@
     <Compile Include="Assets\Scripts\Behavior\NoChestChampionsRef.cs" />
     <Compile Include="Assets\Scripts\Behavior\PlayerReferences.cs" />
     <Compile Include="Assets\Scripts\Behavior\SecondaryChampReferences.cs" />
+    <Compile Include="Assets\Scripts\Behavior\SubmitOnEnter.cs" />
     <Compile Include="Assets\Scripts\Behavior\SummonerSelect.cs" />
     <Compile Include="Assets\Scripts\Behavior\TrackedChampionBtnReference.cs" />
     <Compile Include="Assets\Scripts\Glossary.cs" />
