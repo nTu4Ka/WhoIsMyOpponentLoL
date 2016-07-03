@@ -1,0 +1,13 @@
+/* Add here all your css styles (customizations) */
+.icon-mastery7:before {
+	content: url('../img/icons/icon-mastery7-gs.png');
+}
+.icon-chest:before {
+	content: url('../img/icons/icon-chest-gs.png');
+}
+.icon-champ-mastery:before {
+	content: url('../img/icons/icon-champ-mastery-gs.png');
+}
+.icon-champion-shards:before {
+	content: url('../img/icons/icon-champion-shards-gs.png');
+}
