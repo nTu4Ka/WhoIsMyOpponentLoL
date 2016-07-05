@@ -14,6 +14,9 @@ Keep "Who Is My Opponent LoL" updated so that new champions, new mastery levels 
 There is an embedded mechanism that checks for updates on launch. But if you feel that it doesn't work properly - feel free to download newest version manually.
 I strongly recommend downloading "Who Is My Opponent LoL" from original source at github to ensure you're not using modified version with malicious code.
 
+# Project Website
+https://ntu4ka.github.io/WhoIsMyOpponentLoL/
+
 # Disclaimer
 "Who Is My Opponent LoL" isn't endorsed by Riot Games and doesn't reflect the views or opinions of Riot Games or anyone officially involved in producing or managing League of Legends.
 League of Legends and Riot Games are trademarks or registered trademarks of Riot Games, Inc. League of Legends © Riot Games, Inc.
